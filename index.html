@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AirType — AI Virtual Keyboard</title>
+<style>
+  :root{
+    --bg: #10121a;
+    --panel: #181b26;
+    --panel-2: #1f2333;
+    --line: #2a2f42;
+    --text: #e7e9f0;
+    --muted: #8990a8;
+    --track: #5eead4;
+    --press: #f2b84b;
+    --mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 28px 24px 8px;
+    text-align: center;
+  }
+  header h1 {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: clamp(24px, 4vw, 34px);
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+  }
+  header h1 span { color: var(--track); }
+  header p {
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 520px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 16px 60px;
+  }
+  .stage {
+    position: relative;
+    width: min(960px, 94vw);
+    aspect-ratio: 4 / 3;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  video, canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  video { transform: scaleX(-1); }
+  #overlay { transform: scaleX(-1); }
+  .hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(16,18,26,0.92);
+    text-align: center;
+    padding: 24px;
+    z-index: 5;
+  }
+  .hint button {
+    background: var(--track);
+    color: #0b1512;
+    border: none;
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 15px;
+    padding: 12px 22px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 14px;
+  }
+  .hint button:hover { filter: brightness(1.08); }
+  .hint p { color: var(--muted); max-width: 380px; line-height: 1.5; font-size: 14px; }
+
+  .typed-bar {
+    width: min(960px, 94vw);
+    margin-top: 18px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .typed-bar label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  #typedText {
+    font-family: var(--mono);
+    font-size: 18px;
+    min-height: 24px;
+    flex: 1;
+    word-break: break-word;
+    color: var(--text);
+  }
+  #typedText .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 18px;
+    background: var(--track);
+    vertical-align: middle;
+    margin-left: 2px;
+    animation: blink 1s step-start infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .controls {
+    width: min(960px, 94vw);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .controls button {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  .controls button:hover { border-color: var(--track); color: var(--track); }
+
+  footer {
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+    padding: 0 24px 40px;
+  }
+  footer a { color: var(--track); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Air<span>Type</span></h1>
+  <p>A keyboard you type on by pinching thumb and index finger in mid-air. Runs fully in your browser — nothing is uploaded.</p>
+</header>
+
+<main>
+  <div class="stage" id="stage">
+    <video id="video" playsinline></video>
+    <canvas id="overlay"></canvas>
+    <div class="hint" id="hint">
+      <div>
+        <p>AirType needs camera access to track your hand. Point your palm at the camera, then pinch your <strong>thumb and index finger</strong> together over a key to type it.</p>
+        <button id="startBtn">Enable camera</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="typed-bar">
+    <label>OUTPUT</label>
+    <div id="typedText"><span class="cursor"></span></div>
+  </div>
+
+  <div class="controls">
+    <button id="spaceBtn">Space</button>
+    <button id="backspaceBtn">⌫ Backspace</button>
+    <button id="clearBtn">Clear</button>
+  </div>
+</main>
+
+<footer>
+  Built with <a href="https://developers.google.com/mediapipe/solutions/vision/hand_landmarker" target="_blank" rel="noopener">MediaPipe Hands</a>. Works best in good lighting, with one hand in frame.
+</footer>
+
+<script type="module">
+import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+const KEY_ROWS = [
+  ["Q","W","E","R","T","Y","U","I","O","P"],
+  ["A","S","D","F","G","H","J","K","L",";"],
+  ["Z","X","C","V","B","N","M",",",".","/"]
+];
+
+const video = document.getElementById("video");
+const canvas = document.getElementById("overlay");
+const ctx = canvas.getContext("2d");
+const hint = document.getElementById("hint");
+const startBtn = document.getElementById("startBtn");
+const typedTextEl = document.getElementById("typedText");
+const spaceBtn = document.getElementById("spaceBtn");
+const backspaceBtn = document.getElementById("backspaceBtn");
+const clearBtn = document.getElementById("clearBtn");
+
+let finalText = "";
+let handLandmarker = null;
+let lastPressAt = 0;
+const PRESS_COOLDOWN_MS = 450;
+const PINCH_THRESHOLD = 0.055; // normalized distance (0-1 relative to frame)
+
+let buttons = []; // computed each resize: {x,y,w,h,text}
+
+function renderText() {
+  typedTextEl.innerHTML = (finalText ? escapeHtml(finalText) : "") + '<span class="cursor"></span>';
+}
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+spaceBtn.onclick = () => { finalText += " "; renderText(); };
+backspaceBtn.onclick = () => { finalText = finalText.slice(0, -1); renderText(); };
+clearBtn.onclick = () => { finalText = ""; renderText(); };
+
+function layoutButtons(w, h) {
+  buttons = [];
+  const cols = 10, rows = KEY_ROWS.length;
+  const marginX = w * 0.06;
+  const marginY = h * 0.08;
+  const gap = w * 0.008;
+  const keyW = (w - marginX * 2 - gap * (cols - 1)) / cols;
+  const keyH = keyW; // square-ish
+  KEY_ROWS.forEach((row, r) => {
+    row.forEach((key, c) => {
+      buttons.push({
+        text: key,
+        x: marginX + c * (keyW + gap),
+        y: marginY + r * (keyH + gap),
+        w: keyW,
+        h: keyH
+      });
+    });
+  });
+}
+
+function resizeCanvas() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+  layoutButtons(canvas.width, canvas.height);
+}
+window.addEventListener("resize", resizeCanvas);
+
+function drawKeyboard(highlightIndex, pressedIndex) {
+  buttons.forEach((b, i) => {
+    ctx.lineWidth = 2;
+    if (i === pressedIndex) {
+      ctx.fillStyle = "rgba(242,184,75,0.9)";
+    } else if (i === highlightIndex) {
+      ctx.fillStyle = "rgba(94,234,212,0.35)";
+    } else {
+      ctx.fillStyle = "rgba(31,35,51,0.75)";
+    }
+    ctx.strokeStyle = i === highlightIndex ? "#5eead4" : "#2a2f42";
+    roundRect(ctx, b.x, b.y, b.w, b.h, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(b.x + b.w / 2, b.y + b.h / 2);
+    ctx.scale(-1, 1); // un-mirror text since canvas is flipped via CSS
+    ctx.fillStyle = i === pressedIndex ? "#0b1512" : "#e7e9f0";
+    ctx.font = `600 ${Math.max(16, b.w * 0.34)}px "IBM Plex Mono", monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(b.text, 0, 1);
+    ctx.restore();
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function dist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+async function initHandLandmarker() {
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+  );
+  handLandmarker = await HandLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+      delegate: "GPU"
+    },
+    runningMode: "VIDEO",
+    numHands: 1
+  });
+}
+
+async function startCamera() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { width: 1280, height: 960 }
+  });
+  video.srcObject = stream;
+  await new Promise(res => (video.onloadedmetadata = res));
+  video.play();
+  resizeCanvas();
+}
+
+function loop() {
+  if (video.readyState >= 2 && handLandmarker) {
+    const results = handLandmarker.detectForVideo(video, performance.now());
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    let highlightIndex = -1;
+    let pressedIndex = -1;
+
+    if (results.landmarks && results.landmarks.length > 0) {
+      const lm = results.landmarks[0];
+      // landmark 8 = index fingertip, landmark 4 = thumb tip
+      const indexTip = { x: lm[8].x * canvas.width, y: lm[8].y * canvas.height };
+      const thumbTip = { x: lm[4].x * canvas.width, y: lm[4].y * canvas.height };
+
+      buttons.forEach((b, i) => {
+        if (indexTip.x > b.x && indexTip.x < b.x + b.w && indexTip.y > b.y && indexTip.y < b.y + b.h) {
+          highlightIndex = i;
+        }
+      });
+
+      const pinchDist = dist(lm[8], lm[4]); // normalized coords, resolution-independent
+      if (highlightIndex !== -1 && pinchDist < PINCH_THRESHOLD) {
+        const now = performance.now();
+        if (now - lastPressAt > PRESS_COOLDOWN_MS) {
+          lastPressAt = now;
+          pressedIndex = highlightIndex;
+          finalText += buttons[highlightIndex].text;
+          renderText();
+        }
+      }
+    }
+
+    drawKeyboard(highlightIndex, pressedIndex);
+  }
+  requestAnimationFrame(loop);
+}
+
+startBtn.addEventListener("click", async () => {
+  startBtn.disabled = true;
+  startBtn.textContent = "Starting…";
+  try {
+    await Promise.all([initHandLandmarker(), startCamera()]);
+    hint.style.display = "none";
+    loop();
+  } catch (err) {
+    console.error(err);
+    startBtn.disabled = false;
+    startBtn.textContent = "Enable camera";
+    alert("Couldn't access the camera: " + err.message);
+  }
+});
+
+renderText();
+</script>
+</body>
+</html>
